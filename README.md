@@ -161,7 +161,7 @@ pytest -vv
 
 The suite covers registration, stock-function regressions, ordered alternation, greedy fallback, non-overlap, zero-length progress, anchors, boundaries, UTF-8 slicing, JSON escaping and subtype propagation, errors, connection limits, and adversarial ambiguity.
 
-The current implementation passes 163 SQL-surface tests under normal, AddressSanitizer, and UndefinedBehaviorSanitizer builds. Public-SQL execution covers 92.01% of executable lines and reaches every branch site in `regexp_matches.c`; the remaining lines are defensive allocation-failure and generation-wrap paths that Python's public SQLite API cannot inject
+The current implementation passes 163 SQL-surface tests under normal, AddressSanitizer, and UndefinedBehaviorSanitizer builds. Public-SQL execution covers 92.01% of executable lines and reaches every branch site in `regexpmatches.c`; the remaining lines are defensive allocation-failure and generation-wrap paths that Python's public SQLite API cannot inject
 deterministically.
 
 ## Repository layout
