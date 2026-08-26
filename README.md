@@ -78,6 +78,60 @@ On Windows, a custom build can be obtained using the [sqlite_MSVC_Cpp_Build_Tool
 
 The match-array initializer is translation-unit private and registers only `regexp_matches()` and `regexpi_matches()`. The stock initializer continues to own `regexp()`, `regexpi()`, and the `REGEXP` operator.
 
+## Code walkthrough
+
+### Module workflow
+
+```mermaid
+flowchart TD
+    A["regexpmatchesRegister()"] --> B["remSqlFuncCase() / remSqlFuncNocase()"]
+    B --> C["remSqlFunc()"]
+    C --> D["remSqlCompiled()"]
+    D --> E["stock re_compile()"]
+    C --> F["remMatchSpan() for each result"]
+    F --> G["remSpanClosure()"]
+    G --> H["remSpanStep()"]
+    H --> G
+    C --> I["SQLite JsonString helpers"]
+```
+
+At connection initialization, `regexpmatchesRegister()` registers the two SQL functions. A SQL call enters the appropriate case-mode wrapper and then the shared `remSqlFunc()` driver. The driver obtains a cached stock NFA, repeatedly asks `remMatchSpan()` for the next span, appends each source slice through SQLite's JSON builder, and advances the global cursor without allowing overlap.
+
+`remMatchSpan()` runs one prioritized Pike-VM search. At each input boundary, `remSpanClosure()` expands non-consuming transitions in priority order and `remSpanStep()` advances viable consuming threads by one decoded character. The cycle continues until the winning acceptance is known or no match remains.
+
+### Function map
+
+| Function                  | Responsibility                                                                                                                                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regexpmatchesRegister()` | Registers `regexp_matches()` and `regexpi_matches()` with deterministic, innocuous, and result-subtype flags. It is private to the amalgamation.                                               |
+| `remSqlFuncCase()`        | Thin case-sensitive SQL callback; delegates to `remSqlFunc()` with stock case folding disabled.                                                                                                |
+| `remSqlFuncNocase()`      | Thin ASCII case-insensitive SQL callback; delegates with stock case folding enabled.                                                                                                           |
+| `remSqlFunc()`            | Owns the complete SQL operation: NULL propagation, cached compilation, global non-overlapping iteration, zero-length progress, JSON construction, subtype assignment, and SQL error reporting. |
+| `remSqlCompiled()`        | Retrieves argument 0 from SQLite auxiliary data or compiles it with stock `re_compile()`. It also records whether the compiler inserted the synthetic unanchored-search prefix.                |
+| `remCompiledFree()`       | Auxiliary-data destructor for the extraction wrapper and its stock `ReCompiled` object.                                                                                                        |
+| `remMatchSpan()`          | Selects one match at or after a byte cursor. It coordinates the Pike VM, candidate starts, accepting fallbacks, anchors, and final start/end offsets.                                          |
+| `remSpanVmInit()`         | Allocates the reusable thread lists, closure stack, and visited-state generations for one span search.                                                                                         |
+| `remSpanVmClear()`        | Releases all temporary storage owned by a span search.                                                                                                                                         |
+| `remSpanNewGeneration()`  | Advances the visited-state generation used for constant-time thread deduplication; resets markers if the counter wraps.                                                                        |
+| `remSpanPush()`           | Pushes one thread onto the ordered epsilon-closure stack with a bounds check.                                                                                                                  |
+| `remSpanAddSeed()`        | Adds an entry thread only when a higher-priority thread has not already reached the same opcode.                                                                                               |
+| `remSpanClosure()`        | Computes the ordered epsilon closure. It applies fork priority, assertions, jumps, optimized `.*`, and acceptance ordering without consuming input.                                            |
+| `remSpanConsumes()`       | Tests one consuming stock regexp opcode against the current character and reports the next opcode. It reuses stock word, digit, and whitespace predicates.                                     |
+| `remSpanStep()`           | Runs one consuming VM step for the higher-priority ready threads and constructs the next deduplicated thread list.                                                                             |
+| `remSpanPrevChar()`       | Decodes the character immediately before a byte boundary for word-boundary assertions.                                                                                                         |
+| `remSpanNextChar()`       | Uses the compiled expression's stock decoder to read the character at a byte boundary and return the next boundary.                                                                            |
+
+### Important control points
+
+`remSqlCompiled()` stores extraction-only state in `RemCompiled` rather than changing SQLite's `ReCompiled`. In particular, `bUnanchored` distinguishes the compiler's synthetic leading `RE_OP_ANYSTAR` from a real `.*` at the beginning of an anchored pattern such as `^.*a`.
+
+`remSpanClosure()` is where regex-path priority becomes concrete. For a positive `RE_OP_FORK`, fall-through is visited first, preserving ordered alternation and greedy optional operands. For a negative fork displacement, the repeated path is visited before the exit path. The first thread reaching an opcode in one generation wins; later duplicates cannot have different
+future behavior and are discarded.
+
+`remMatchSpan()` does not immediately return on `RE_OP_ACCEPT`. It retains the acceptance as a fallback while any higher-priority thread remains viable. This is what makes the first branch win in `a|aa` while still allowing greedy non-possessive matching in `.*a`.
+
+Finally, `remSqlFunc()` turns single-span selection into global matching. A non-empty result moves the cursor to its end. An empty result advances by one UTF-8 code point, except at end-of-input, and an empty match directly abutting the preceding non-empty result is not emitted.
+
 ## Supported pattern language
 
 The module accepts exactly the language compiled by the included stock `regexp.c`, including:
