@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 
 [project]
-name = "regexp_matches"
+name = "regexpmatches"
 version = "0.0.0"
 description = "SQLite regexp matches extension."
 
@@ -43,7 +43,7 @@ dev = [
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["regexp_matches/src/regexp_matches"]
+packages = ["regexpmatches/src/regexpmatches"]
 
 
 [tool.ruff]
@@ -124,9 +124,12 @@ known-first-party = ["pblob"]
 combine-as-imports = true
 
 
-[tool.pytest.ini_options]
-addopts = "-ra -q"
-testpaths = ["regexp_matches/tests"]
+[tool.pytest]
+addopts = ["-ra", "-q"]
+testpaths = ["regexpmatches/tests"]
+markers = [
+    "complexity: adversarial scalability and pathological-runtime regression tests",
+]
 
 
 [tool.mypy]
