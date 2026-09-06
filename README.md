@@ -74,7 +74,7 @@ stock ext/misc/regexp.c
 src/regexpmatches.c
 ```
 
-On Windows, a custom build can be obtained using the [sqlite_MSVC_Cpp_Build_Tools.ext.bat](sqlite_MSVC_Cpp_Build_Tools.ext.bat) script (see this [note](https://github.com/pchemguy/Field-Notes/tree/main/11-sqlite-msvc-build) for details).
+On Windows, a custom build can be obtained using the [sqlite_MSVC_Cpp_Build_Tools.ext.bat](sqlite_MSVC_Cpp_Build_Tools.ext.bat) script (see this [note](https://github.com/pchemguy/Field-Notes/tree/main/notes/11-sqlite-msvc-build) for details).
 
 The match-array initializer is translation-unit private and registers only `regexp_matches()` and `regexpi_matches()`. The stock initializer continues to own `regexp()`, `regexpi()`, and the `REGEXP` operator.
 
