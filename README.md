@@ -3,6 +3,12 @@
 `regexpmatches.c` is an amalgamation-only companion to SQLite's stock [`ext/misc/regexp.c`](https://github.com/sqlite/sqlite/blob/master/ext/misc/regexp.c). It adds `regexp_matches()` and `regexpi_matches()`, which return successive non-overlapping complete matches as a JSON array. The module leaves
 `regexp.c` unchanged and reuses SQLite's private regexp compiler, NFA representation, UTF-8 routines, limits, allocators, auxiliary-data cache mechanism, and JSON builder. It is intentionally not a separately compiled or loadable extension.
 
+> [!IMPORTANT]
+> 
+> **AI-Assisted Development Disclosure**
+> 
+> This project has been developed with extensive generative-AI assistance. Assistance covered project exploration, design discussion, specification development, implementation, testing, technical review, and documentation. See [AI_DISCLOSURE.md](AI_DISCLOSURE.md) for further details. Responsibility for the published software remains with the maintainer.
+
 ## SQL interface
 
 ```sql
