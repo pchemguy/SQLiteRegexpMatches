@@ -14,6 +14,8 @@ import pytest
         ("a+", "aaa", ["aaa"]),
         ("a?", "a", ["a"]),
         ("a{2,4}", "aaaaa", ["aaaa"]),
+        ("a{2,}a", "aa aaaa", ["aaaa"]),
+        ("a{0,}b", "b aab", ["b", "aab"]),
         (".*a", "a 1 a 2", ["a 1 a"]),
         ("a.*b", "a1b2b", ["a1b2b"]),
         ("a.*bc", "a1bc2bc", ["a1bc2bc"]),

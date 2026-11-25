@@ -12,6 +12,7 @@ import os
 import sqlite3
 import warnings
 from collections.abc import Callable, Iterator
+from contextlib import closing
 
 import pytest
 
@@ -38,7 +39,7 @@ def verify_custom_sqlite(pytestconfig: pytest.Config) -> None:
     """Verify required functions without pinning a particular SQLite version."""
     expected = pytestconfig.getoption("--sqlite-source-id")
 
-    with sqlite3.connect(":memory:") as connection:
+    with closing(sqlite3.connect(":memory:")) as connection:
         version, actual = connection.execute(
             "SELECT sqlite_version(), sqlite_source_id()"
         ).fetchone()
@@ -49,20 +50,23 @@ def verify_custom_sqlite(pytestconfig: pytest.Config) -> None:
                 pytest.PytestWarning,
                 stacklevel=1,
             )
-        assert connection.execute(
-            "SELECT sqlite_compileoption_used('OMIT_JSON')"
-        ).fetchone()[0] == 0
+        options = {option for (option,) in connection.execute("PRAGMA compile_options")}
+        if "OMIT_JSON" in options:
+            pytest.exit(
+                f"Python's SQLite {version} ({actual}) omits JSON support.",
+                returncode=pytest.ExitCode.TESTS_FAILED,
+            )
         rows = connection.execute(
-            """
-            SELECT name, narg
-            FROM pragma_function_list
-            WHERE name IN ('regexp', 'regexpi',
-                           'regexp_matches', 'regexpi_matches')
-            """
-        ).fetchall()
-        assert {(name, narg) for name, narg in rows} == {
-            (name, 2) for name in FUNCTION_NAMES
-        }
+            "SELECT name FROM pragma_function_list WHERE enc='utf8' AND narg=2"
+        )
+        missing = FUNCTION_NAMES.difference(name for (name,) in rows)
+        if missing:
+            pytest.exit(
+                f"Python's SQLite {version} ({actual}) lacks the two-argument UTF-8 "
+                f"functions {', '.join(sorted(missing))}. "
+                "Use the custom SQLite build as described in README.md under Testing.",
+                returncode=pytest.ExitCode.TESTS_FAILED,
+            )
 
 
 @pytest.fixture
