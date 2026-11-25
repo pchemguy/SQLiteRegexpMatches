@@ -188,6 +188,13 @@ static int remSpanClosure(
         }
         break;
 
+      case RE_OP_ATEND:
+        if( cNext==RE_EOF
+         && remSpanPush(pVm, x+1, t.iStart)!=SQLITE_OK ){
+          return SQLITE_NOMEM;
+        }
+        break;
+
       case RE_OP_BOUNDARY:
         if( re_word_char(cNext)!=re_word_char(cPrev)
          && remSpanPush(pVm, x+1, t.iStart)!=SQLITE_OK ){
@@ -200,17 +207,6 @@ static int remSpanClosure(
         pVm->ready.aThread[pVm->ready.nThread++] = t;
         if( remSpanPush(pVm, x+1, t.iStart)!=SQLITE_OK ){
           return SQLITE_NOMEM;
-        }
-        break;
-
-      case RE_OP_MATCH:
-        if( pRe->aArg[x]==RE_EOF ){
-          if( cNext==RE_EOF
-           && remSpanPush(pVm, x+1, t.iStart)!=SQLITE_OK ){
-            return SQLITE_NOMEM;
-          }
-        }else{
-          pVm->ready.aThread[pVm->ready.nThread++] = t;
         }
         break;
 
@@ -446,7 +442,6 @@ static RemCompiled *remSqlCompiled(
     return 0;
   }
   memset(p, 0, sizeof(*p));
-  p->bUnanchored = zPattern[0]!='^';
   zErr = re_compile(&p->pRe, zPattern, re_maxnfa(mxLen), noCase);
   if( zErr ){
     remCompiledFree(p);
@@ -458,6 +453,8 @@ static RemCompiled *remSqlCompiled(
     sqlite3_result_error_nomem(context);
     return 0;
   }
+  /* A leading ^ may anchor only one alternative, as in ^a|b. */
+  p->bUnanchored = p->pRe->aOp[0]==RE_OP_ANYSTAR;
   *pSetAux = 1;
   return p;
 }

@@ -1,7 +1,6 @@
 # SQLite `regexpmatches`
 
-`regexpmatches.c` is an amalgamation-only companion to SQLite's stock [`ext/misc/regexp.c`](https://github.com/sqlite/sqlite/blob/master/ext/misc/regexp.c). It adds `regexp_matches()` and `regexpi_matches()`, which return successive non-overlapping complete matches as a JSON array. The module leaves
-`regexp.c` unchanged and reuses SQLite's private regexp compiler, NFA representation, UTF-8 routines, limits, allocators, auxiliary-data cache mechanism, and JSON builder. It is intentionally not a separately compiled or loadable extension.
+[`regexpmatches.c`](src/regexpmatches.c) is an amalgamation-only extension that adds `regexp_matches()` and `regexpi_matches()` to SQLite. Both return successive non-overlapping complete matches as a JSON array. The module uses the compiler and UTF-8 decoder from SQLite's stock [`ext/misc/regexp.c`](https://github.com/sqlite/sqlite/blob/master/ext/misc/regexp.c), together with SQLite's limits, allocators, auxiliary-data cache and JSON builder.
 
 > [!IMPORTANT]
 > 
@@ -16,7 +15,7 @@ regexp_matches(pattern, input)
 regexpi_matches(pattern, input)
 ```
 
-Both functions return JSON text with SQLite's JSON subtype. `regexpi_matches()` follows stock `regexpi()` and performs ASCII-only case-insensitive matching.
+Both functions return JSON text with SQLite's JSON subtype. `regexpi_matches()` follows stock `regexpi()` and performs ASCII-only case-insensitive matching, preserving the spelling in the input. Patterns and inputs support well-formed UTF-8 text without embedded NULs.
 
 ```sql
 SELECT regexp_matches('[0-9]+', 'A12 B345');
@@ -72,7 +71,7 @@ Parentheses retain the stock engine's non-capturing behavior. Returned array mem
 
 ## Integration
 
-`regexpmatches.c` depends deliberately on private static definitions from SQLite's regexp and JSON implementations. All components must therefore be part of one C translation unit in this order:
+Use a SQLite source tree containing the [November 16, 2026 regexp update](https://github.com/sqlite/sqlite/commit/3e5b45b3416a9bc3b54ac10c544e223a13eb6e06). The matcher uses the stock compiler's `RE_OP_ATEND` instruction for `$`. Its other private regexp and JSON dependencies require the following order in one C translation unit.
 
 ```text
 SQLite amalgamation, including JSON
@@ -80,9 +79,53 @@ stock ext/misc/regexp.c
 src/regexpmatches.c
 ```
 
-On Windows, a custom build can be obtained using the [sqlite_MSVC_Cpp_Build_Tools.ext.bat](sqlite_MSVC_Cpp_Build_Tools.ext.bat) script (see this [note](https://github.com/pchemguy/Field-Notes/tree/main/notes/11-sqlite-msvc-build) for details).
+The stock stage prepares `regexp.c` and generates `misc_ext_init.c`. The [RegexpMatches hook](sqlite_ext_regexpmatches.bat) adds `sqlite3RegexpmatchesInit()` to that dispatcher and appends `regexpmatches.c` to `EXTRA_SRC`. On each new connection, `sqlite3ExtraAutoExtInit()` calls the stock initializer for `regexp()`, `regexpi()` and the `REGEXP` operator, and the project initializer registers the two match-array functions. Applications use them directly when linked to the resulting SQLite library.
 
-The match-array initializer is translation-unit private and registers only `regexp_matches()` and `regexpi_matches()`. The stock initializer continues to own `regexp()`, `regexpi()`, and the `REGEXP` operator.
+## Build on Windows with MSVC
+
+The [SQLite-ICU-MinGW MSVC guide](https://github.com/pchemguy/SQLite-ICU-MinGW/blob/master/Current/MSVC/README.md) is the primary reference for the SQLite build harness. This repository ships one [preset](sqlite_msbuild_bare_icu_ext_extra.bat). It enables Conda ICU, ZLIB, the stock `ext/misc` modules and the RegexpMatches hook. For a custom build, call [sqlite_msbuild.bat](sqlite_msbuild.bat) directly. Keep `SQLITE_EXTRA=1` for stock regexp and the dispatcher, `USE_EXTRAS=1` for the project hook and `SQLITE_ENABLE_REGEXPMATCHES=1` for its registration. The stock stage requires ZLIB. The match functions themselves use the stock regexp engine even in the ICU build.
+
+### Prepare Python and the build tools
+
+Install the MSVC C++ Build Tools and Windows SDK. The checker can activate an installed x64 toolchain. For the preset on x86, use an initialized x86 Native Tools prompt and a matching x86 Conda environment with ICU. Run the commands below from the repository root in a path without spaces for the harness's hook discovery.
+
+If a matching Conda environment with ICU development files and pytest is already active, proceed to the build. For the bundled x64 setup, start a clean `cmd.exe /d /e:on /v:on` with `CONDA_PREFIX` unset, `python.exe` and `conda.bat` off `PATH`, and `curl.exe` and Windows `tar.exe` available. Cache setup replaces the user's pip and uv cache directories with junctions. The bootstrap also removes `%APPDATA%\mamba` if it exists. [Conda Bootstrap](https://github.com/pchemguy/Conda-Bootstrap) · [Cache and filesystem changes](https://github.com/pchemguy/Conda-Bootstrap/blob/main/windows/Anaconda.md#cache-and-filesystem-changes)
+
+```cmd
+set "PKGS=python=3.11 icu"
+call pyenv\Anaconda.bat
+set "PKGS="
+call pyenv\conda_far.bat /batch
+```
+
+The full bootstrap creates `pyenv\Anaconda` from [Anaconda_bootstrap.yml](pyenv/Anaconda_bootstrap.yml) and installs pytest from [Anaconda.yml](pyenv/Anaconda.yml). `PKGS` requests the specification's Python 3.11 and ICU explicitly. The bootstrap returns early if the prefix already contains `python.exe`. In subsequent clean prompts, run only the activation command. For missing packages in an existing active prefix, use `conda install -c conda-forge icu pytest`. The launcher checks MSVC before activating Conda. The SQLite harness checks the Microsoft linker and verifies that the versioned Conda ICU DLL matches the MSVC target.
+
+### Build the checked-out source
+
+The hook reads `out\cache\SQLiteRegexpMatches\src\regexpmatches.c` and downloads the file from `main` on a cache miss. To build this checkout, seed the cache before invoking the preset. Start with a fresh `out` for a different SQLite snapshot or architecture. For edits to `src\regexpmatches.c`, refresh the cached copy and start with a fresh `out\build` so NMake regenerates the amalgamation.
+
+```cmd
+if not exist "out\cache\SQLiteRegexpMatches\src" mkdir "out\cache\SQLiteRegexpMatches\src"
+copy /b /y "src\regexpmatches.c" "out\cache\SQLiteRegexpMatches\src\regexpmatches.c"
+cmd /d /c sqlite_msbuild_bare_icu_ext_extra.bat
+```
+
+On a fresh build, the harness downloads the [SQLite source snapshot](https://sqlite.org/src/zip/sqlite.zip) and the latest ZLIB release, and stages ICU from `%CONDA_PREFIX%\Library`. Later runs reuse `out\cache\sqlite.zip` and the extracted `out\sqlite` tree. If compilation reports an undefined `RE_OP_ATEND`, start with a fresh `out` to obtain the required SQLite source.
+
+| Output | Location |
+| --- | --- |
+| `sqlite3.exe`, `sqlite3.dll`, ICU runtime DLLs and `zlib1.dll` | `out\bin` |
+| SQLite headers | `out\include` |
+| DLL import library `sqlite3.lib` and export definition `sqlite3.def` | `out\lib\import` |
+| Static SQLite library | `out\lib\static\libsqlite3.lib` |
+
+Check the packaged shell from the repository root.
+
+```cmd
+out\bin\sqlite3.exe :memory: "SELECT regexp_matches('^a|b', 'xbb'), regexpi_matches('b$', 'aB');"
+```
+
+Expected output is `["b","b"]|["B"]`. To verify the DLL used by Python, follow [Testing](#testing).
 
 ## Code walkthrough
 
@@ -101,7 +144,7 @@ flowchart TD
     C --> I["SQLite JsonString helpers"]
 ```
 
-At connection initialization, `regexpmatchesRegister()` registers the two SQL functions. A SQL call enters the appropriate case-mode wrapper and then the shared `remSqlFunc()` driver. The driver obtains a cached stock NFA, repeatedly asks `remMatchSpan()` for the next span, appends each source slice through SQLite's JSON builder, and advances the global cursor without allowing overlap.
+`sqlite3RegexpmatchesInit()` calls the private `regexpmatchesRegister()` helper. A SQL call enters the appropriate case-mode wrapper and then the shared `remSqlFunc()` driver. The driver obtains a cached stock NFA, repeatedly asks `remMatchSpan()` for the next span, appends each source slice through SQLite's JSON builder, and advances the global cursor without allowing overlap.
 
 `remMatchSpan()` runs one prioritized Pike-VM search. At each input boundary, `remSpanClosure()` expands non-consuming transitions in priority order and `remSpanStep()` advances viable consuming threads by one decoded character. The cycle continues until the winning acceptance is known or no match remains.
 
@@ -129,7 +172,7 @@ At connection initialization, `regexpmatchesRegister()` registers the two SQL fu
 
 ### Important control points
 
-`remSqlCompiled()` stores extraction-only state in `RemCompiled` rather than changing SQLite's `ReCompiled`. In particular, `bUnanchored` distinguishes the compiler's synthetic leading `RE_OP_ANYSTAR` from a real `.*` at the beginning of an anchored pattern such as `^.*a`.
+`remSqlCompiled()` records whether the first compiled instruction is the synthetic `RE_OP_ANYSTAR` search prefix. This matters for `^a|b`. Only the first alternative is anchored, so the second can match each `b` anywhere in the input. For `^.*a` the compiler replaces the prefix with a jump and the matcher executes the pattern's own `.*`. The pattern-text check in the [original design](docs/explore_develop/SPECIFICATION.md#95-unanchored-search-state) describes the earlier compiler.
 
 `remSpanClosure()` is where regex-path priority becomes concrete. For a positive `RE_OP_FORK`, fall-through is visited first, preserving ordered alternation and greedy optional operands. For a negative fork displacement, the repeated path is visited before the exit path. The first thread reaching an opcode in one generation wins; later duplicates cannot have different
 future behavior and are discarded.
@@ -140,14 +183,14 @@ Finally, `remSqlFunc()` turns single-span selection into global matching. A non-
 
 ## Supported pattern language
 
-The module accepts exactly the language compiled by the included stock `regexp.c`, including:
+The included stock `regexp.c` defines the pattern language.
 
-- `*`, `+`, `?`, and `{m,n}` repetition;
-- grouping and alternation;
-- `^` and `$` anchors;
-- `.`, bracket character classes, and negated classes;
-- `\b`, `\w`, `\W`, `\d`, `\D`, `\s`, and `\S`;
-- the escapes supported by the stock compiler.
+- Repetition with `*`, `+`, `?`, `{m}`, `{m,n}` and `{m,}`
+- Grouping and alternation
+- `^` and `$` anchors
+- `.`, bracket character classes and negated classes
+- `\b`, `\w`, `\W`, `\d`, `\D`, `\s` and `\S`
+- Character escapes supported by the stock compiler
 
 It does not add capture extraction, replacement, splitting, overlap mode, flags argument, lazy or possessive quantifiers, lookaround, backreferences, named groups, Unicode case folding, or PCRE syntax.
 
@@ -155,29 +198,32 @@ It does not add capture extraction, replacement, splitting, overlap mode, flags 
 
 The span executor is a prioritized Pike VM. At each input boundary, the first thread reaching a compiled program counter wins and duplicate threads are discarded. One span search is bounded by `O(P × I)` time and `O(P)` active-state memory, where `P` is the compiled NFA size and `I` is the examined input length.
 
-Global extraction restarts at the end of each selected match. A higher-priority path may inspect text beyond the fallback match ultimately returned, so the aggregate worst case for `K` results is `O(K × P × I)`. The implementation does not claim whole-call linearity.
+Global extraction restarts after each selected match. A higher-priority path may inspect text beyond the fallback match ultimately returned. With `K` results and a possible final unsuccessful search, worst-case search time is `O((K + 1) × P × I)`. The JSON output also requires space proportional to its serialized length.
 
 ## Testing
 
-Tests exercise only the public SQL surface through Python's standard `sqlite3` module under `pytest`. They do not substitute Python regexp or JSON implementations and do not expose test-only C helpers. 
+The suite exercises the public SQL functions through Python's standard `sqlite3` module. To select the DLL from `out\bin` for a test run, preload it in a fresh Python process before importing pytest. Run this command from the repository root in the activated Conda environment.
 
-```batch
-pytest -vv
+```cmd
+python -c "import ctypes, os; dll = ctypes.CDLL(os.path.abspath(r'out\bin\sqlite3.dll')); import pytest; raise SystemExit(pytest.main())" -v regexpmatches/tests
 ```
 
-The suite covers registration, stock-function regressions, ordered alternation, greedy fallback, non-overlap, zero-length progress, anchors, boundaries, UTF-8 slicing, JSON escaping and subtype propagation, errors, connection limits, and adversarial ambiguity.
+Append `-m complexity` to that command to select only the adversarial cases. When Python already links to the custom SQLite, run pytest directly.
 
-The current implementation passes 163 SQL-surface tests under normal, AddressSanitizer, and UndefinedBehaviorSanitizer builds. Public-SQL execution covers 92.01% of executable lines and reaches every branch site in `regexpmatches.c`; the remaining lines are defensive allocation-failure and generation-wrap paths that Python's public SQLite API cannot inject
-deterministically.
+```cmd
+python -m pytest -v regexpmatches/tests
+python -m pytest -v -m complexity regexpmatches/tests
+```
+
+The session check reports the SQLite version and source ID if required registrations are missing. An optional `--sqlite-source-id "..."` or `REGEXP_TEST_SOURCE_ID` requests a warning on a snapshot mismatch. The checks use fresh in-memory connections to cover stock regexp, match selection and priority, zero-length progress, UTF-8 slicing, JSON subtype propagation through expression indexes, compiler errors and connection limits.
 
 ## Repository layout
 
-```text
-src/regexpmatches.c                   amalgamation-only production module
-regexpmatches/tests/                  structured public-SQL pytest suite
-SPECIFICATION.md                      normative implementation specification
-sqlite_MSVC_Cpp_Build_Tools.ext.bat   Windows/MSVC build script
-```
-
-The detailed semantic, architectural, security, and acceptance requirements are defined in
-[SPECIFICATION.md](SPECIFICATION.md).
+| Path | Purpose |
+| --- | --- |
+| [src/regexpmatches.c](src/regexpmatches.c) | Amalgamation module and registration entry point |
+| [sqlite_msbuild.bat](sqlite_msbuild.bat), [sqlite_msbuild_bare_icu_ext_extra.bat](sqlite_msbuild_bare_icu_ext_extra.bat) | Windows build harness and project preset |
+| [sqlite_ext_regexpmatches.bat](sqlite_ext_regexpmatches.bat), [tool/](tool/) | Project source hook and amalgamation helpers |
+| [pyenv/](pyenv/) | Windows Conda bootstrap, activation scripts and package manifests |
+| [regexpmatches/tests/](regexpmatches/tests/) | Public-SQL pytest suite |
+| [SPECIFICATION.md](docs/explore_develop/SPECIFICATION.md) | Original design specification and SQL acceptance criteria |
