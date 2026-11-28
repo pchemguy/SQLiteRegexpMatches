@@ -442,17 +442,18 @@ exit /b 0
 :: 
 :: Accepts variable number of variable name candidates. For each name reports,
 :: if the corresponding variable is undefined or its value, if defined.
+:: Set VARS_TITLE before calling to replace default title.
 
 setlocal
 
 set "PAD10=          "
 set "WIDTH=25"
+if not defined VARS_TITLE (set "VARS_TITLE=Checking environment variables:")
 
 echo:
 echo ----------------------------------------------------------------------
-echo Checking environment variables:
-echo     %*
-echo:
+echo %WARN% %VARS_TITLE%
+echo %INFO%
 
 :NEXT_VAR
 
@@ -462,7 +463,7 @@ set "VAR_LABEL=%~1=%PAD10%%PAD10%%PAD10%%PAD10%"
 set "VAR_LABEL=!VAR_LABEL:~0,%WIDTH%!"
 
 if defined %~1 (
-    echo %INFO% %VAR_LABEL% ''!%~1!''
+    echo %INFO% %VAR_LABEL% `!%~1!`
 ) else (
     echo %WARN% %VAR_LABEL% not defined.
 )

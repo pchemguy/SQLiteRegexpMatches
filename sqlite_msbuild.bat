@@ -152,6 +152,7 @@ if not "%EXIT_STATUS%"=="0" (
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 endlocal & exit /b %EXIT_STATUS%
@@ -274,6 +275,7 @@ echo %INFO% --------------------------------------------------------------------
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -316,6 +318,7 @@ set OPT_XTRA=%OPT_XTRA% ^
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -333,6 +336,7 @@ echo %INFO% ZLIBDIR="%ZLIBDIR%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -360,6 +364,7 @@ echo %INFO% ICUBINDIR="%ICUBINDIR%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -385,6 +390,7 @@ if defined TARGET (
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 endlocal && exit /b 0
 :: ============================================================================
@@ -407,6 +413,7 @@ set "EXIT_STATUS=%ERRORLEVEL%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 endlocal & exit /b %EXIT_STATUS%
 :: ============================================================================
@@ -430,6 +437,7 @@ set "EXIT_STATUS=%ERRORLEVEL%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 endlocal & exit /b %EXIT_STATUS%
@@ -446,44 +454,15 @@ set "SECTION=ZLIB_DOWNLOAD"
 
 set "NAME=ZLIB"
 set "DISTRO=%CACHEDIR%\zlib.tar.gz"
-if not exist "%DISTRO%" goto :ZLIB_DOWNLOAD_LATEST
-if exist "%DISTRO%\" (
-    echo %ERROR% Expected a file, not a directory: "%DISTRO%"
-    exit /b 1
-)
-echo %OKOK% Using previously downloaded ZLIB: "%DISTRO%"
-exit /b 0
-
-:ZLIB_DOWNLOAD_LATEST
-
-rem set "URL=https://zlib.net/current/zlib.tar.gz"
-set "URL_PREFIX=https://github.com/madler/zlib/releases"
-
-set "URL_LOG=%CACHEDIR%\zlib-release-url.txt"
-curl.exe -fsSL -o NUL -w "%%{url_effective}\n" -- "%URL_PREFIX%/latest" >"%URL_LOG%"
-if not "%ERRORLEVEL%"=="0" (
-    echo %ERROR% Failed to resolve the latest ZLIB release.
-    exit /b 1
-)
-:: Accept only dotted numeric versions, such as v1.4 or v1.3.1; reject empty components.
-set "TAG=https://github[.]com/madler/zlib/releases/tag/v[0-9][0-9.]*[.][0-9][0-9]*"
-set "ZLIB_VERSION="
-for /f "usebackq tokens=7 delims=/" %%V in (
-    `findstr /r /x /c:"%TAG%" "%URL_LOG%" ^| findstr /l /v /c:".."`
-) do set "ZLIB_VERSION=%%V"
-if not defined ZLIB_VERSION (
-    echo %ERROR% Unexpected ZLIB release URL. See "%URL_LOG%".
-    exit /b 1
-)
-set "URL=%URL_PREFIX%/download/%ZLIB_VERSION%/zlib-%ZLIB_VERSION:~1%.tar.gz"
+set "URL=https://zlib.net/current/zlib.tar.gz"
 
 call "%~dp0download_file.bat" "%NAME%" "%DISTRO%" "%URL%"
 set "EXIT_STATUS=%ERRORLEVEL%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
-if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 endlocal & exit /b %EXIT_STATUS%
 :: ============================================================================
 :: ============================================================================ ZLIB_DOWNLOAD END
@@ -500,32 +479,16 @@ set "NAME=ZLIB"
 set "FLAG=%ZLIBDIR%\win32\Makefile.msc"
 set "SRC=%CACHEDIR%\zlib.tar.gz"
 set "DST=%THIRDDIR%"
-call "%~dp0extract_archive.bat" "%NAME%" "%FLAG%" "%SRC%" "%DST%" || exit /b !ERRORLEVEL!
 
-set "ROOT="
-for /f "usebackq eol=| delims=" %%D in (`dir /b /a:d "%DST%\zlib-*" 2^>nul`) do (
-    if defined ROOT goto :ZLIB_EXTRACT_BAD_ROOT
-    set "ROOT=%%D"
-)
-if not defined ROOT if exist "%ZLIBDIR%\." goto :ZLIB_EXTRACT_DONE
-set "VERSION=zlib-[0-9][0-9.]*[.][0-9][0-9]*"
-dir /b /a:d "%DST%\zlib-*" 2>nul | findstr /r /x /c:"%VERSION%" | findstr /l /v /c:".." >nul || goto :ZLIB_EXTRACT_BAD_ROOT
-if not exist "%DST%\%ROOT%\win32\Makefile.msc" goto :ZLIB_EXTRACT_BAD_ROOT
-if exist "%DST%\%ROOT%\win32\Makefile.msc\" goto :ZLIB_EXTRACT_BAD_ROOT
-ren "%DST%\%ROOT%" "zlib" || exit /b !ERRORLEVEL!
-echo %OKOK% Renamed "%ROOT%" to "%ZLIBDIR%".
-
-:ZLIB_EXTRACT_DONE
+call "%~dp0extract_archive.bat" "%NAME%" "%FLAG%" "%SRC%" "%DST%"
+set "EXIT_STATUS=%ERRORLEVEL%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
-endlocal && exit /b 0
-
-:ZLIB_EXTRACT_BAD_ROOT
-
-echo %ERROR% Expected one versioned zlib directory containing win32\Makefile.msc.
-exit /b 1
+if not defined EXIT_STATUS (set "EXIT_STATUS=0")
+endlocal & exit /b %EXIT_STATUS%
 :: ============================================================================
 :: ============================================================================ ZLIB_EXTRACT END
 
@@ -554,6 +517,7 @@ if not exist "%ZLIBDIR%\zlib1.dll" (
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 endlocal & exit /b %EXIT_STATUS%
@@ -603,6 +567,7 @@ for %%F in ("%STAGE%\bin%ARCH%\icu??.dll" "%STAGE%\bin%ARCH%\icutest*.dll") do (
 )
 
 :ICU_CONDA_VALIDATE
+
 set "COMMON="
 for /f "usebackq delims=" %%F in (
     `dir /b /a:-d "%ROOT%\bin%ARCH%\icuuc*.dll" 2^>nul ^| findstr /i /r /x "icuuc[0-9][0-9]*\.dll"`
@@ -661,6 +626,7 @@ exit /b 1
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 endlocal & exit /b %EXIT_STATUS%
@@ -681,6 +647,7 @@ set "EXIT_STATUS=%ERRORLEVEL%"
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 if not defined EXIT_STATUS (set "EXIT_STATUS=0")
 exit /b %EXIT_STATUS%
@@ -769,6 +736,7 @@ set EXTRA_SRC=%EXTRA_SRC% ^
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -788,6 +756,7 @@ for %%P in (%~dp0sqlite_ext_*) do (
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -841,6 +810,7 @@ if not "%ERRORLEVEL%"=="0" (
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
@@ -867,6 +837,7 @@ echo ---------- Copied  binaries -----------
 
 echo:
 echo %INFO% ~~~~~ %SECTION% ~~~~~
+echo --------------------------------------------------------------------------------
 echo:
 exit /b 0
 :: ============================================================================
